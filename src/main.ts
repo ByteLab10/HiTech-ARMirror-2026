@@ -11,14 +11,15 @@
 //       Created once in JS and appended to <body>. No HTML/CSS changes needed.
 //
 //  3. QR code overlay
-//       Created once in JS and appended to <body>. Positioned bottom-left over
-//       the preview canvas. Hidden/shown in sync with the preview.
+//       Created once in JS and appended to <body>. Positioned bottom-left.
 //
 //  4. Preview canvas scale fix
 //       After drawing the captured image onto photo-preview-canvas, its CSS
 //       width/height are set via JS so it fits the screen without zooming.
-//       The existing CSS (centered with translate(-50%,-50%)) still applies;
-//       only the rendered size changes.
+//
+//  5. Top Corner Action Buttons (Fixes applied)
+//       - Force-clears any old background images from CSS so only the SVG shows.
+//       - Automatically hides the Tick/Approve button once the QR is generated.
 // =============================================================================
 
 import { initializeApp }                        from 'firebase/app';
@@ -34,7 +35,7 @@ import {
 import { APP_CONFIG }                           from './AppConfig';
 
 // ---------------------------------------------------------------------------
-// Layout constants — identical to original
+// Layout constants
 // ---------------------------------------------------------------------------
 const BUTTON_WIDTH        = 60;
 const BUTTON_MARGIN       = 30;
@@ -59,7 +60,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const storage     = getStorage(firebaseApp);
 
 // ---------------------------------------------------------------------------
-// State — identical to original
+// State
 // ---------------------------------------------------------------------------
 let cameraKitSession: CameraKitSession | null = null;
 let mediaStream:      MediaStream | null       = null;
@@ -73,28 +74,79 @@ let allLenses:         any[]                   = [];
 let currentLensIndex:  number                  = 0;
 
 // ---------------------------------------------------------------------------
-// Dynamically created UI — keeps HTML/CSS untouched
+// Dynamically created UI
 // ---------------------------------------------------------------------------
 let uploadLoaderEl: HTMLDivElement | null = null;
 let qrOverlayEl:   HTMLDivElement | null = null;
 
+/** Enhances the action buttons into beautiful top-corner circular icons */
+function styleTopCornerButtons() {
+  if (closePreviewBtn) {
+    // Inject "X" SVG Icon
+    closePreviewBtn.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    Object.assign(closePreviewBtn.style, {
+      position: 'fixed',
+      top: '40px',
+      left: '40px',
+      width: '64px',
+      height: '64px',
+      borderRadius: '50%',
+      backgroundColor: '#ffffff',
+      backgroundImage: 'none', // Force override any old CSS background icons
+      border: '4px solid #000000',
+      display: 'none', 
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+      zIndex: '1005',
+      boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+      padding: '0',
+      color: 'transparent',
+      transition: 'opacity 0.2s ease-in-out'
+    });
+  }
+
+  if (downloadImageBtn) {
+    // Inject "Tick/Approve" SVG Icon
+    downloadImageBtn.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    Object.assign(downloadImageBtn.style, {
+      position: 'fixed',
+      top: '40px',
+      right: '40px',
+      width: '64px',
+      height: '64px',
+      borderRadius: '50%',
+      backgroundColor: '#ffffff',
+      backgroundImage: 'none', // Force override any old CSS background icons
+      border: '4px solid #000000',
+      display: 'none', 
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+      zIndex: '1005',
+      boxShadow: '0 4px 10px rgba(0,0,0,0.3)',
+      padding: '0',
+      color: 'transparent',
+      transition: 'opacity 0.2s ease-in-out'
+    });
+  }
+}
+
 /** Creates the upload loading overlay once and appends it to <body>. */
 function createUploadLoader(): HTMLDivElement {
   const el = document.createElement('div');
-  // Inline styles so no CSS file changes are needed
   Object.assign(el.style, {
     position:        'fixed',
     inset:           '0',
     zIndex:          '1010',
     background:      'rgba(0,0,0,0.65)',
-    display:         'none',           // shown via JS
+    display:         'none',
     flexDirection:   'column',
     alignItems:      'center',
     justifyContent:  'center',
     gap:             '16px',
   });
 
-  // Spinner
   const spinner = document.createElement('div');
   Object.assign(spinner.style, {
     width:       '52px',
@@ -105,7 +157,6 @@ function createUploadLoader(): HTMLDivElement {
     animation:   'mirrorSpin 0.75s linear infinite',
   });
 
-  // Inject keyframes once
   if (!document.getElementById('mirror-spin-style')) {
     const style = document.createElement('style');
     style.id        = 'mirror-spin-style';
@@ -113,7 +164,6 @@ function createUploadLoader(): HTMLDivElement {
     document.head.appendChild(style);
   }
 
-  // Label
   const label = document.createElement('p');
   label.textContent = 'Uploading your snap…';
   Object.assign(label.style, {
@@ -134,10 +184,10 @@ function createQrOverlay(): HTMLDivElement {
   const el = document.createElement('div');
   Object.assign(el.style, {
     position:       'fixed',
-    bottom:         '24px',
-    left:           '24px',
+    bottom:         '40px',
+    left:           '40px',
     zIndex:         '1005',
-    display:        'none',            // shown via JS after upload
+    display:        'none',
     flexDirection:  'column',
     alignItems:     'center',
     gap:            '6px',
@@ -172,7 +222,7 @@ function createQrOverlay(): HTMLDivElement {
 }
 
 // ---------------------------------------------------------------------------
-// Canvas / render-size helpers — identical to original
+// Canvas / render-size helpers
 // ---------------------------------------------------------------------------
 function updateCameraCanvasSize() {
   if (!camerakitCanvas) return null;
@@ -196,7 +246,7 @@ function resizeCameraRender() {
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap — identical to original
+// Bootstrap
 // ---------------------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
   camerakitCanvas  = document.getElementById('CameraKit-AR-Canvas') as HTMLCanvasElement | null;
@@ -212,16 +262,17 @@ window.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('resize',            resizeCameraRender);
   window.addEventListener('orientationchange', resizeCameraRender);
 
-  // Create dynamic UI elements (appended to body, no HTML changes)
+  // Initialize UI Enhancements
   uploadLoaderEl = createUploadLoader();
   qrOverlayEl    = createQrOverlay();
+  styleTopCornerButtons();
 
   updateCameraCanvasSize();
   await initCameraKit();
 });
 
 // ---------------------------------------------------------------------------
-// CameraKit init — identical to original
+// CameraKit init
 // ---------------------------------------------------------------------------
 async function initCameraKit() {
   if (!camerakitCanvas) {
@@ -249,7 +300,7 @@ async function initCameraKit() {
     console.log(`Applied lens ${selectedLens.id}`);
 
     createLensCarousel(lenses);
-    await setCameraKitSource(cameraKitSession, false);
+    await setCameraKitSource(cameraKitSession, true);
     setupCaptureUI();
     hideSplashLoader();
   } catch (error) {
@@ -258,7 +309,7 @@ async function initCameraKit() {
 }
 
 // ---------------------------------------------------------------------------
-// Camera source — identical to original
+// Camera source
 // ---------------------------------------------------------------------------
 async function setCameraKitSource(session: CameraKitSession, useFrontCamera = false) {
   mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -288,7 +339,7 @@ async function setCameraKitSource(session: CameraKitSession, useFrontCamera = fa
 }
 
 // ---------------------------------------------------------------------------
-// UI wiring — identical to original
+// UI wiring
 // ---------------------------------------------------------------------------
 function setupCaptureUI() {
   if (!captureBtn || !downloadImageBtn || !closePreviewBtn) return;
@@ -306,7 +357,7 @@ function hideSplashLoader() {
 }
 
 // ---------------------------------------------------------------------------
-// Lens carousel — identical to original
+// Lens carousel
 // ---------------------------------------------------------------------------
 function createLensCarousel(lenses: any[]) {
   const leftCarousel     = document.createElement('div');
@@ -380,8 +431,6 @@ async function switchLens(index: number) {
 
 // ---------------------------------------------------------------------------
 // capturePhoto
-// Same logic as original PLUS a scale fix so the preview canvas fits the
-// screen without zooming (no CSS change — sizes are set via JS).
 // ---------------------------------------------------------------------------
 function capturePhoto() {
   if (!camerakitCanvas) {
@@ -393,8 +442,8 @@ function capturePhoto() {
 
     const photoPreviewCanvas = document.getElementById('photo-preview-canvas') as HTMLCanvasElement | null;
     if (photoPreviewCanvas) {
-      photoPreviewCanvas.width  = camerakitCanvas.width;   // 2160
-      photoPreviewCanvas.height = camerakitCanvas.height;  // 3840
+      photoPreviewCanvas.width  = camerakitCanvas.width;   
+      photoPreviewCanvas.height = camerakitCanvas.height;  
 
       const ctx = photoPreviewCanvas.getContext('2d');
       if (ctx) {
@@ -403,12 +452,9 @@ function capturePhoto() {
           ctx.clearRect(0, 0, photoPreviewCanvas.width, photoPreviewCanvas.height);
           ctx.drawImage(img, 0, 0);
 
-          // ── FIX: scale canvas to fit screen while keeping aspect ratio ──
-          // The existing CSS centres it (position:fixed; top/left 50%; translate).
-          // We just set the CSS display size so it doesn't render at 2160×3840.
           const scaleW = window.innerWidth  / photoPreviewCanvas.width;
           const scaleH = window.innerHeight / photoPreviewCanvas.height;
-          const scale  = Math.min(scaleW, scaleH);         // contain, no crop
+          const scale  = Math.min(scaleW, scaleH);         
           photoPreviewCanvas.style.width  = `${Math.round(photoPreviewCanvas.width  * scale)}px`;
           photoPreviewCanvas.style.height = `${Math.round(photoPreviewCanvas.height * scale)}px`;
 
@@ -420,7 +466,14 @@ function capturePhoto() {
     }
 
     captureBtn?.style.setProperty('display', 'none');
-    downloadImageBtn?.style.setProperty('display', 'flex');
+    
+    // Reset and show the buttons on a fresh capture
+    if (downloadImageBtn) {
+      downloadImageBtn.style.display = 'flex';
+      downloadImageBtn.disabled = false;
+      downloadImageBtn.style.opacity = '1';
+    }
+    
     closePreviewBtn?.style.setProperty('display', 'flex');
 
     const leftCarousel  = document.getElementById('left-lens-carousel');
@@ -433,7 +486,7 @@ function capturePhoto() {
 }
 
 // ---------------------------------------------------------------------------
-// closePreview — same as original + hides the QR overlay
+// closePreview
 // ---------------------------------------------------------------------------
 function closePreview() {
   capturedImageData = null;
@@ -441,22 +494,21 @@ function closePreview() {
   const previewCanvas = document.getElementById('photo-preview-canvas') as HTMLCanvasElement | null;
   if (previewCanvas) {
     previewCanvas.style.display = 'none';
-    // Reset JS-set sizes so next capture recalculates correctly
     previewCanvas.style.width  = '';
     previewCanvas.style.height = '';
   }
 
   if (camerakitCanvas) camerakitCanvas.style.display = 'block';
 
-  // Reset download button
   if (downloadImageBtn) {
     downloadImageBtn.style.display = 'none';
     downloadImageBtn.disabled      = false;
+    downloadImageBtn.style.opacity = '1'; 
   }
+  
   if (closePreviewBtn) closePreviewBtn.style.display = 'none';
   if (captureBtn)      captureBtn.style.display      = 'flex';
 
-  // Hide QR overlay
   if (qrOverlayEl) qrOverlayEl.style.display = 'none';
 
   const leftCarousel  = document.getElementById('left-lens-carousel');
@@ -466,50 +518,53 @@ function closePreview() {
 }
 
 // ---------------------------------------------------------------------------
-// uploadAndShowQR — replaces the original downloadImage()
-// Uploads to Firebase, shows a loading overlay while waiting, then displays
-// the QR code over the preview canvas.
+// uploadAndShowQR
 // ---------------------------------------------------------------------------
 async function uploadAndShowQR() {
   if (!capturedImageData) return;
 
-  // Show loading overlay
   if (uploadLoaderEl)   uploadLoaderEl.style.display = 'flex';
-  if (downloadImageBtn) downloadImageBtn.disabled     = true;
+  
+  // Dim the button during upload
+  if (downloadImageBtn) {
+      downloadImageBtn.disabled = true;
+      downloadImageBtn.style.opacity = '0.5';
+  }
 
   try {
-    // 1. Upload to Firebase Storage
     const fileName   = `snaps/photo-${Date.now()}.png`;
     const storageRef = ref(storage, fileName);
     await uploadString(storageRef, capturedImageData, 'data_url');
     const downloadURL = await getDownloadURL(storageRef);
     console.log('Uploaded! URL:', downloadURL);
 
-    // 2. Generate QR code pointing to the Firebase URL
     const qrDataUrl = await QRCode.toDataURL(downloadURL, {
       width:  220,
       margin: 2,
       color:  { dark: '#000000', light: '#ffffff' },
     });
 
-    // 3. Hide loader
     if (uploadLoaderEl) uploadLoaderEl.style.display = 'none';
 
-    // 4. Show QR overlay (bottom-left, over the preview canvas)
+    // Completely remove the Tick/Approve button now that QR is showing!
+    if (downloadImageBtn) {
+      downloadImageBtn.style.display = 'none';
+    }
+
     const qrImg = document.getElementById('qr-code-image') as HTMLImageElement | null;
     if (qrImg && qrOverlayEl) {
       qrImg.src                  = qrDataUrl;
       qrOverlayEl.style.display  = 'flex';
     }
 
-    if (downloadImageBtn) {
-      downloadImageBtn.disabled = true;
-    }
   } catch (error) {
     console.error('Upload or QR generation failed:', error);
     if (uploadLoaderEl)   uploadLoaderEl.style.display = 'none';
+    
+    // Reactivate the button if it fails so they can try again
     if (downloadImageBtn) {
       downloadImageBtn.disabled = false;
+      downloadImageBtn.style.opacity = '1';
     }
   }
 }
